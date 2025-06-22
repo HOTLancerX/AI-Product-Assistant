@@ -1,0 +1,97 @@
+[
+  {
+    "id": "tv-samsung-55-4k",
+    "title": "Samsung 55\" 4K Smart TV",
+    "price": 699,
+    "brand": "Samsung",
+    "category": "TV",
+    "size": "55 inch",
+    "image": "/placeholder.svg?height=300&width=400",
+    "shortDescription": "Premium 4K Smart TV with HDR support, built-in streaming apps, and voice control. Perfect for living rooms and entertainment centers.",
+    "description": "Experience stunning 4K resolution with this Samsung Smart TV featuring HDR10+ technology, Crystal Display for vibrant colors, and Tizen OS with built-in Netflix, YouTube, and Prime Video. Includes 3 HDMI ports, WiFi connectivity, and Alexa compatibility.",
+    "features": ["4K Resolution", "HDR10+", "Smart TV", "Voice Control", "WiFi", "3 HDMI Ports"],
+    "specifications": {
+      "resolution": "3840 x 2160",
+      "display": "LED",
+      "os": "Tizen",
+      "connectivity": ["WiFi", "Bluetooth", "HDMI", "USB"],
+      "audio": "20W Speakers"
+    }
+  },
+  {
+    "id": "tv-lg-43-budget",
+    "title": "LG 43\" Full HD Smart TV",
+    "price": 399,
+    "brand": "LG",
+    "category": "TV",
+    "size": "43 inch",
+    "image": "/placeholder.svg?height=300&width=400",
+    "shortDescription": "Affordable Full HD Smart TV with webOS, perfect for bedrooms and smaller spaces. Great value for money with essential smart features.",
+    "description": "Compact and affordable LG Smart TV with Full HD resolution, webOS platform for easy streaming, and ThinQ AI for voice control. Features 2 HDMI ports, built-in WiFi, and access to popular streaming services.",
+    "features": ["Full HD", "Smart TV", "webOS", "ThinQ AI", "WiFi", "2 HDMI Ports"],
+    "specifications": {
+      "resolution": "1920 x 1080",
+      "display": "LED",
+      "os": "webOS",
+      "connectivity": ["WiFi", "HDMI", "USB"],
+      "audio": "10W Speakers"
+    }
+  },
+  {
+    "id": "tv-sony-65-premium",
+    "title": "Sony 65\" 4K OLED TV",
+    "price": 1299,
+    "brand": "Sony",
+    "category": "TV",
+    "size": "65 inch",
+    "image": "/placeholder.svg?height=300&width=400",
+    "shortDescription": "Premium OLED TV with exceptional picture quality, perfect blacks, and cinema-grade color accuracy. Ideal for movie enthusiasts and large living rooms.",
+    "description": "Sony's flagship OLED TV featuring perfect blacks, infinite contrast, and Triluminos Pro color technology. Includes Google TV, Dolby Vision, HDMI 2.1 for gaming, and Acoustic Surface Audio technology.",
+    "features": ["4K OLED", "Dolby Vision", "Google TV", "HDMI 2.1", "Gaming Mode", "Acoustic Surface Audio"],
+    "specifications": {
+      "resolution": "3840 x 2160",
+      "display": "OLED",
+      "os": "Google TV",
+      "connectivity": ["WiFi", "Bluetooth", "HDMI 2.1", "USB"],
+      "audio": "30W Acoustic Surface Audio"
+    }
+  },
+  {
+    "id": "tv-tcl-32-basic",
+    "title": "TCL 32\" HD Smart TV",
+    "price": 249,
+    "brand": "TCL",
+    "category": "TV",
+    "size": "32 inch",
+    "image": "/placeholder.svg?height=300&width=400",
+    "shortDescription": "Compact and affordable HD Smart TV, perfect for bedrooms, kitchens, or dorm rooms. Basic smart features with popular streaming apps.",
+    "description": "Budget-friendly TCL Smart TV with HD resolution, Roku TV platform for easy streaming, and compact design perfect for smaller spaces. Includes 2 HDMI ports and built-in WiFi.",
+    "features": ["HD Resolution", "Roku TV", "Compact Design", "WiFi", "2 HDMI Ports"],
+    "specifications": {
+      "resolution": "1366 x 768",
+      "display": "LED",
+      "os": "Roku TV",
+      "connectivity": ["WiFi", "HDMI", "USB"],
+      "audio": "8W Speakers"
+    }
+  },
+  {
+    "id": "tv-hisense-50-gaming",
+    "title": "Hisense 50\" 4K Gaming TV",
+    "price": 549,
+    "brand": "Hisense",
+    "category": "TV",
+    "size": "50 inch",
+    "image": "/placeholder.svg?height=300&width=400",
+    "shortDescription": "Gaming-optimized 4K TV with low input lag, variable refresh rate, and game mode. Perfect for console gaming and entertainment.",
+    "description": "Hisense gaming TV featuring 4K resolution, Game Mode Pro with low input lag, Variable Refresh Rate (VRR), and Auto Low Latency Mode (ALLM). Includes VIDAA smart platform and 4 HDMI ports.",
+    "features": ["4K Gaming", "Low Input Lag", "VRR", "Game Mode Pro", "VIDAA OS", "4 HDMI Ports"],
+    "specifications": {
+      "resolution": "3840 x 2160",
+      "display": "QLED",
+      "os": "VIDAA",
+      "connectivity": ["WiFi", "Bluetooth", "HDMI 2.1", "USB"],
+      "audio": "20W DTS Audio"
+    }
+  }
+]
