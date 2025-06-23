@@ -1,6 +1,5 @@
+//app/page.tsx
 "use client"
-
-import type React from "react"
 import { useChat } from "ai/react"
 import { useState, useRef, useEffect } from "react"
 import {
@@ -16,6 +15,9 @@ import {
   Send,
   Mic,
   AlertCircle,
+  Check,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import productsData from "@/data/products.json"
 
@@ -35,6 +37,11 @@ interface Product {
   specifications: Record<string, any>
 }
 
+interface Recommendation {
+  primary: Product
+  alternatives: Product[]
+}
+
 interface AIInsights {
   confidence: number
   userIntent: string
@@ -44,13 +51,6 @@ interface AIInsights {
     size?: string
     brand?: string
   }
-  recommendedProducts?: string[]
-}
-
-interface Message {
-  role: "user" | "assistant"
-  content: string
-  timestamp: Date
 }
 
 export default function AIProductRecommender() {
@@ -61,19 +61,17 @@ export default function AIProductRecommender() {
     },
     onError: (error) => {
       console.error("Chat error:", error)
-      // Show user-friendly error message
       setAiInsights({
         confidence: 0,
         userIntent: "Error occurred",
-        requirements: {},
-        recommendedProducts: ["tv-samsung-55-4k", "tv-lg-43-budget"],
+        requirements: {}
       })
     },
   })
 
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
-  const [showDetailedView, setShowDetailedView] = useState(false)
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [aiInsights, setAiInsights] = useState<AIInsights | null>(null)
+  const [showDetailedView, setShowDetailedView] = useState(false)
   const [currentLanguage, setCurrentLanguage] = useState("en")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -86,86 +84,55 @@ export default function AIProductRecommender() {
   }, [messages])
 
   useEffect(() => {
-    // Show default products on initial load
     if (messages.length === 0) {
-      setSelectedProducts(productsData.slice(0, 3))
+      setRecommendation({
+        primary: productsData[0],
+        alternatives: productsData.slice(1, 3)
+      })
     }
   }, [messages.length])
 
   const detectLanguage = (text: string): string => {
-    // Simple language detection based on common patterns
-    if (/[\u0600-\u06FF]/.test(text)) return "ar" // Arabic
-    if (/[\u09A0-\u09FF]/.test(text)) return "bn" // Bengali
-    if (/[\u0900-\u097F]/.test(text)) return "hi" // Hindi
-    if (/[\u4E00-\u9FFF]/.test(text)) return "zh" // Chinese
-    if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return "ja" // Japanese
-    return "en" // Default to English
+    if (/[\u0600-\u06FF]/.test(text)) return "ar"
+    if (/[\u4E00-\u9FFF]/.test(text)) return "zh"
+    return "en"
   }
 
   const analyzeAIResponse = (response: string) => {
-    // Extract product recommendations from AI response
-    const productIds = productsData.map((p) => p.id)
-    const productTitles = productsData.map((p) => p.title.toLowerCase())
+    // Extract primary product ID
+    const primaryMatch = response.match(/<!-- PRIMARY_PRODUCT_ID:([a-zA-Z0-9-]+) -->/)
+    const primaryId = primaryMatch ? primaryMatch[1] : null
 
-    // Find mentioned products by ID or title
-    const mentionedProductIds = productIds.filter((id) => response.toLowerCase().includes(id.toLowerCase()))
+    // Find all mentioned product IDs
+    const mentionedIds = productsData
+      .filter(product => response.includes(product.id))
+      .map(p => p.id)
 
-    const mentionedByTitle = productsData
-      .filter((product) =>
-        productTitles.some(
-          (title) =>
-            response.toLowerCase().includes(title) ||
-            product.title
-              .toLowerCase()
-              .split(" ")
-              .some((word) => word.length > 3 && response.toLowerCase().includes(word)),
-        ),
-      )
-      .map((p) => p.id)
+    const primaryProduct = primaryId 
+      ? productsData.find(p => p.id === primaryId)
+      : mentionedIds.length > 0
+        ? productsData.find(p => p.id === mentionedIds[0])
+        : productsData[0]
 
-    const allMentionedIds = [...new Set([...mentionedProductIds, ...mentionedByTitle])]
+    const alternativeProducts = mentionedIds.length > 1
+      ? mentionedIds
+          .filter(id => id !== primaryProduct?.id)
+          .map(id => productsData.find(p => p.id === id))
+          .filter(Boolean)
+          .slice(0, 2) as Product[]
+      : productsData
+          .filter(p => p.id !== primaryProduct?.id)
+          .slice(0, 2)
 
-    // Get the actual product objects
-    const recommendedProducts = allMentionedIds
-      .map((id) => productsData.find((p) => p.id === id))
-      .filter(Boolean) as Product[]
-
-    // If no specific products mentioned, use intelligent matching based on keywords
-    const keywords = response.toLowerCase() // Declare the keywords variable here
-    if (recommendedProducts.length === 0) {
-      let matchedProducts: Product[] = []
-
-      // Budget-based matching
-      if (keywords.includes("budget") || keywords.includes("cheap") || keywords.includes("affordable")) {
-        matchedProducts = productsData.filter((p) => p.price < 500)
-      }
-      // Premium matching
-      else if (keywords.includes("premium") || keywords.includes("best") || keywords.includes("high-end")) {
-        matchedProducts = productsData.filter((p) => p.price > 800)
-      }
-      // Size-based matching
-      else if (keywords.includes("large") || keywords.includes("big") || keywords.includes("65")) {
-        matchedProducts = productsData.filter((p) => p.size.includes("65"))
-      } else if (keywords.includes("small") || keywords.includes("bedroom") || keywords.includes("32")) {
-        matchedProducts = productsData.filter((p) => p.size.includes("32") || p.size.includes("43"))
-      }
-      // Gaming matching
-      else if (keywords.includes("gaming") || keywords.includes("game")) {
-        matchedProducts = productsData.filter(
-          (p) => p.id.includes("gaming") || p.features.some((f) => f.toLowerCase().includes("gaming")),
-        )
-      }
-      // Default to popular products
-      else {
-        matchedProducts = productsData.slice(0, 3)
-      }
-
-      setSelectedProducts(matchedProducts.slice(0, 3))
-    } else {
-      setSelectedProducts(recommendedProducts.slice(0, 3))
+    if (primaryProduct) {
+      setRecommendation({
+        primary: primaryProduct,
+        alternatives: alternativeProducts
+      })
     }
 
-    // Generate AI insights based on response content
+    // Generate AI insights
+    const keywords = response.toLowerCase()
     let confidence = 85
     let userIntent = "Product Search"
 
@@ -183,9 +150,8 @@ export default function AIProductRecommender() {
       confidence = 95
     }
 
-    // Extract budget from response
     const budgetMatch = response.match(/\$(\d+)/g)
-    const budgetNumbers = budgetMatch ? budgetMatch.map((b) => Number.parseInt(b.replace("$", ""))) : []
+    const budgetNumbers = budgetMatch ? budgetMatch.map(b => Number.parseInt(b.replace("$", ""))) : []
     const maxBudget = budgetNumbers.length > 0 ? Math.max(...budgetNumbers) : undefined
 
     setAiInsights({
@@ -194,8 +160,7 @@ export default function AIProductRecommender() {
       requirements: {
         budget: maxBudget ? { max: maxBudget } : undefined,
         features: keywords.includes("4k") ? ["4K"] : [],
-      },
-      recommendedProducts: allMentionedIds,
+      }
     })
   }
 
@@ -220,7 +185,6 @@ export default function AIProductRecommender() {
     const detectedLang = detectLanguage(input)
     setCurrentLanguage(detectedLang)
 
-    // Add language context to the request
     const customHandleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
       handleSubmit(e, {
         data: { language: detectedLang },
@@ -230,7 +194,7 @@ export default function AIProductRecommender() {
     customHandleSubmit(e)
   }
 
-  const formattedMessages: Message[] = messages.map((msg) => ({
+  const formattedMessages = messages.map((msg) => ({
     role: msg.role as "user" | "assistant",
     content: msg.content,
     timestamp: new Date(),
@@ -260,9 +224,9 @@ export default function AIProductRecommender() {
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-blue-100">Intent: {aiInsights.userIntent}</div>
-                {aiInsights.recommendedProducts && aiInsights.recommendedProducts.length > 0 && (
+                {recommendation && (
                   <div className="mt-1 text-xs text-blue-100">
-                    Products Found: {aiInsights.recommendedProducts.length}
+                    Products Found: {1 + recommendation.alternatives.length}
                   </div>
                 )}
               </div>
@@ -380,12 +344,6 @@ export default function AIProductRecommender() {
                   className="w-full p-3 pr-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   disabled={isLoading}
                 />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
               </div>
               <button
                 type="submit"
@@ -398,9 +356,9 @@ export default function AIProductRecommender() {
           </div>
         </div>
 
-        {/* Products Section - Always Shows Recommendations */}
+        {/* Products Section */}
         <div className="w-full md:w-2/3 p-6 overflow-y-auto">
-          {selectedProducts.length > 0 ? (
+          {recommendation ? (
             <div className="space-y-8">
               {/* AI Analysis Header */}
               {aiInsights && (
@@ -430,123 +388,120 @@ export default function AIProductRecommender() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <Sparkles className="w-4 h-4 text-purple-600" />
-                      <span className="text-gray-600">Products Found: {selectedProducts.length}</span>
+                      <span className="text-gray-600">Products Found: {1 + recommendation.alternatives.length}</span>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Primary AI Recommendation - Highlighted */}
-              {selectedProducts.length > 0 && (
-                <div>
-                  <div className="flex items-center space-x-2 mb-6">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
-                      <Brain className="w-4 h-4 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                      🎯 Top AI Recommendation
-                    </h2>
-                    <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold animate-pulse">
-                      BEST MATCH
-                    </div>
+              <div>
+                <div className="flex items-center space-x-2 mb-6">
+                  <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
+                    <Brain className="w-4 h-4 text-white" />
                   </div>
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                    🎯 Top AI Recommendation
+                  </h2>
+                  <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold animate-pulse">
+                    BEST MATCH
+                  </div>
+                </div>
 
-                  {/* Featured Product Card - Large and Prominent */}
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-4 border-green-300 rounded-3xl p-8 shadow-2xl mb-8 relative overflow-hidden">
-                    {/* Decorative elements */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/30 to-emerald-200/30 rounded-full -translate-y-16 translate-x-16"></div>
-                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-200/20 to-purple-200/20 rounded-full translate-y-12 -translate-x-12"></div>
+                {/* Featured Product Card */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-4 border-green-300 rounded-3xl p-8 shadow-2xl mb-8 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/30 to-emerald-200/30 rounded-full -translate-y-16 translate-x-16"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-200/20 to-purple-200/20 rounded-full translate-y-12 -translate-x-12"></div>
 
-                    <div className="relative z-10">
-                      <div className="flex flex-col lg:flex-row gap-8">
-                        <div className="lg:w-1/2">
-                          <div className="relative">
-                            <img
-                              src={selectedProducts[0].image || "/placeholder.svg"}
-                              alt={selectedProducts[0].title}
-                              className="w-full h-64 object-cover rounded-2xl shadow-lg"
-                            />
-                            <div className="absolute top-4 left-4 bg-green-500 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center space-x-2">
-                              <Star className="w-4 h-4" />
-                              <span>#1 CHOICE</span>
-                            </div>
-                            <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full text-lg font-bold text-green-600">
-                              {aiInsights ? `${aiInsights.confidence}%` : "95%"} Match
-                            </div>
+                  <div className="relative z-10">
+                    <div className="flex flex-col lg:flex-row gap-8">
+                      <div className="lg:w-1/2">
+                        <div className="relative">
+                          <img
+                            src={recommendation.primary.image || "/placeholder.svg"}
+                            alt={recommendation.primary.title}
+                            className="w-full h-64 object-cover rounded-2xl shadow-lg"
+                          />
+                          <div className="absolute top-4 left-4 bg-green-500 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center space-x-2">
+                            <Star className="w-4 h-4" />
+                            <span>#1 CHOICE</span>
                           </div>
-                        </div>
-
-                        <div className="lg:w-1/2 space-y-4">
-                          <h3 className="text-3xl font-bold text-gray-800">{selectedProducts[0].title}</h3>
-                          <div className="flex items-center space-x-4">
-                            <p className="text-4xl font-bold text-green-600">${selectedProducts[0].price}</p>
-                            <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                              Best Value
-                            </div>
-                          </div>
-
-                          <p className="text-gray-700 leading-relaxed text-lg">
-                            {selectedProducts[0].shortDescription}
-                          </p>
-
-                          {/* Key Features */}
-                          <div>
-                            <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
-                              <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
-                              Why This is Perfect for You:
-                            </h4>
-                            <div className="grid grid-cols-2 gap-3">
-                              {selectedProducts[0].features.slice(0, 6).map((feature, idx) => (
-                                <div key={idx} className="flex items-center space-x-2">
-                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                  <span className="text-sm font-medium text-gray-700">{feature}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex space-x-4 pt-4">
-                            <button
-                              onClick={() => setShowDetailedView(!showDetailedView)}
-                              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 flex items-center justify-center space-x-2"
-                            >
-                              <Info className="w-5 h-5" />
-                              <span>{showDetailedView ? "Simple View" : "Full Details"}</span>
-                            </button>
-                            <button className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all duration-200">
-                              Add to Cart
-                            </button>
+                          <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-full text-lg font-bold text-green-600">
+                            {aiInsights ? `${aiInsights.confidence}%` : "95%"} Match
                           </div>
                         </div>
                       </div>
 
-                      {/* Detailed Specifications (if enabled) */}
-                      {showDetailedView && (
-                        <div className="mt-8 pt-8 border-t border-green-200">
-                          <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
-                            <Brain className="w-5 h-5 mr-2 text-blue-500" />
-                            Complete Technical Specifications:
+                      <div className="lg:w-1/2 space-y-4">
+                        <h3 className="text-3xl font-bold text-gray-800">{recommendation.primary.title}</h3>
+                        <div className="flex items-center space-x-4">
+                          <p className="text-4xl font-bold text-green-600">${recommendation.primary.price}</p>
+                          <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                            Best Value
+                          </div>
+                        </div>
+
+                        <p className="text-gray-700 leading-relaxed text-lg">
+                          {recommendation.primary.shortDescription}
+                        </p>
+
+                        {/* Key Features */}
+                        <div>
+                          <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                            <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
+                            Why This is Perfect for You:
                           </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {Object.entries(selectedProducts[0].specifications).map(([key, value]) => (
-                              <div key={key} className="bg-white p-4 rounded-xl shadow-sm">
-                                <p className="font-medium text-gray-800 capitalize mb-1">{key}:</p>
-                                <p className="text-gray-600 text-sm">
-                                  {Array.isArray(value) ? value.join(", ") : value}
-                                </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {recommendation.primary.features.slice(0, 6).map((feature, idx) => (
+                              <div key={idx} className="flex items-center space-x-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm font-medium text-gray-700">{feature}</span>
                               </div>
                             ))}
                           </div>
                         </div>
-                      )}
+
+                        {/* Action Buttons */}
+                        <div className="flex space-x-4 pt-4">
+                          <button
+                            onClick={() => setShowDetailedView(!showDetailedView)}
+                            className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 flex items-center justify-center space-x-2"
+                          >
+                            <Info className="w-5 h-5" />
+                            <span>{showDetailedView ? "Simple View" : "Full Details"}</span>
+                          </button>
+                          <button className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all duration-200">
+                            Add to Cart
+                          </button>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Detailed Specifications */}
+                    {showDetailedView && (
+                      <div className="mt-8 pt-8 border-t border-green-200">
+                        <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
+                          <Brain className="w-5 h-5 mr-2 text-blue-500" />
+                          Complete Technical Specifications:
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {Object.entries(recommendation.primary.specifications).map(([key, value]) => (
+                            <div key={key} className="bg-white p-4 rounded-xl shadow-sm">
+                              <p className="font-medium text-gray-800 capitalize mb-1">{key}:</p>
+                              <p className="text-gray-600 text-sm">
+                                {Array.isArray(value) ? value.join(", ") : value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Alternative Recommendations */}
-              {selectedProducts.length > 1 && (
+              {recommendation.alternatives.length > 0 && (
                 <div>
                   <div className="flex items-center space-x-2 mb-6">
                     <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
@@ -554,17 +509,18 @@ export default function AIProductRecommender() {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-800">Other Great Options</h3>
                     <div className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm">
-                      {selectedProducts.length - 1} alternatives
+                      {recommendation.alternatives.length} alternatives
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {selectedProducts.slice(1).map((product, index) => (
+                    {recommendation.alternatives.map((product, index) => (
                       <div
                         key={product.id}
-                        onClick={() =>
-                          setSelectedProducts([product, ...selectedProducts.filter((p) => p.id !== product.id)])
-                        }
+                        onClick={() => setRecommendation({
+                          primary: product,
+                          alternatives: [recommendation.primary, ...recommendation.alternatives.filter(p => p.id !== product.id)]
+                        })}
                         className="bg-white border-2 border-gray-200 hover:border-blue-300 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer group"
                       >
                         <div className="relative mb-4">
@@ -627,7 +583,10 @@ export default function AIProductRecommender() {
                   {productsData.map((product) => (
                     <div
                       key={product.id}
-                      onClick={() => setSelectedProducts([product])}
+                      onClick={() => setRecommendation({
+                        primary: product,
+                        alternatives: productsData.filter(p => p.id !== product.id).slice(0, 2)
+                      })}
                       className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow cursor-pointer"
                     >
                       <img
@@ -658,7 +617,10 @@ export default function AIProductRecommender() {
                   {productsData.slice(0, 4).map((product) => (
                     <div
                       key={product.id}
-                      onClick={() => setSelectedProducts([product])}
+                      onClick={() => setRecommendation({
+                        primary: product,
+                        alternatives: productsData.filter(p => p.id !== product.id).slice(0, 2)
+                      })}
                       className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow cursor-pointer"
                     >
                       <img

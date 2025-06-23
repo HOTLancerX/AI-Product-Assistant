@@ -1,144 +1,139 @@
+//app/api/chat/route.ts
 import { streamText } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import type { NextRequest } from "next/server"
 import productsData from "@/data/products.json"
 
-// Allow streaming responses up to 30 seconds
 export const maxDuration = 30
 
-// Configure OpenRouter with proper model
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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",
+  apiKey: process.env.OPENROUTER_API_KEY,
 })
+
+function findRelatedProducts(primaryProductId: string, criteria: any) {
+  const primaryProduct = productsData.find(p => p.id === primaryProductId)
+  if (!primaryProduct) return []
+
+  return productsData
+    .filter(p => p.id !== primaryProductId)
+    .sort((a, b) => {
+      // Score based on matching criteria
+      let aScore = 0
+      let bScore = 0
+
+      if (criteria.priceRange) {
+        aScore += Math.max(0, 50 - Math.abs(a.price - criteria.priceRange))
+        bScore += Math.max(0, 50 - Math.abs(b.price - criteria.priceRange))
+      }
+
+      if (criteria.features) {
+        aScore += a.features.filter(f => criteria.features.includes(f)).length * 20
+        bScore += b.features.filter(f => criteria.features.includes(f)).length * 20
+      }
+
+      if (criteria.brand) {
+        aScore += a.brand === criteria.brand ? 30 : 0
+        bScore += b.brand === criteria.brand ? 30 : 0
+      }
+
+      return bScore - aScore
+    })
+    .slice(0, 3) // Get top 3 related products
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { messages, language = "en" } = await req.json()
+    const lastUserMessage = messages.filter((m: { role: string }) => m.role === 'user').pop()?.content || ""
 
-    // Create system prompt with product data and language context
-    const systemPrompt = `You are an advanced AI product recommendation assistant with deep analytical capabilities. 
+    // Extract search criteria from message
+    const priceMatch = lastUserMessage.match(/\$(\d+)/g)
+    const priceRange = priceMatch ? Math.max(...priceMatch.map((p: string) => Number(p.replace('$', '')))) : null
+
+    const features = ['4K', 'HDR', 'Smart', 'Gaming', 'OLED'].filter(f => 
+      lastUserMessage.toLowerCase().includes(f.toLowerCase())
+    )
+
+    const brand = ['Samsung', 'LG', 'Sony', 'TCL', 'Hisense'].find(b => 
+      lastUserMessage.toLowerCase().includes(b.toLowerCase())
+    )
+
+    const criteria = { priceRange, features, brand }
+
+    const systemPrompt = `You are an advanced AI product recommendation system.
 
 PRODUCT DATABASE:
 ${JSON.stringify(productsData, null, 2)}
 
-CORE INSTRUCTIONS:
-1. Analyze user queries thoroughly before responding
-2. Always suggest specific products from the database that match user requirements
-3. Format your response using proper HTML tags: <h1>, <h2>, <p>, <ul>, <li>, <strong>, <em>
-4. Structure your response with clear sections and proper formatting
-5. Always mention specific product names and IDs from the database
-6. Provide detailed reasoning for each recommendation
-7. Extract user requirements (budget, size, features, brand preferences)
-8. Respond in ${language} language
-9. Include confidence scores and match explanations
-10. Remember conversation context and previous recommendations
+RESPONSE PROTOCOL:
+1. Identify the SINGLE best matching product as PRIMARY_RECOMMENDATION
+2. Mark it with <!-- PRIMARY_PRODUCT_ID:[id] --> in your response
+3. Provide detailed reasoning for why it's the best match
+4. Then suggest 2-3 RELATED_PRODUCTS that are good alternatives
+5. Format response with clear HTML structure
 
-RESPONSE FORMAT (Use HTML formatting):
-<h1>🧠 AI Analysis Results</h1>
-<p>Based on your requirements, I've analyzed your needs and found the perfect matches:</p>
+RESPONSE TEMPLATE:
+<!-- PRIMARY_PRODUCT_ID:[best-match-product-id] -->
+<h2>Best Match For Your Needs</h2>
+[Detailed analysis of why this is the best match]
 
-<h2>📊 Your Requirements Analysis:</h2>
-<ul>
-<li><strong>Budget:</strong> [detected budget range]</li>
-<li><strong>Size:</strong> [screen size or product size needed]</li>
-<li><strong>Features:</strong> [key features mentioned]</li>
-<li><strong>Use Case:</strong> [bedroom, living room, gaming, etc.]</li>
-</ul>
+<h2>Alternative Options</h2>
+[Brief comparison of alternative products]
 
-<h2>🎯 Top Recommendations:</h2>
-<p><strong>Primary Recommendation:</strong></p>
-<ul>
-<li><strong>[Product Name]</strong> - $[Price]</li>
-<li><strong>Why it's perfect:</strong> [detailed explanation]</li>
-<li><strong>Key Features:</strong> [relevant features]</li>
-<li><strong>Match Confidence:</strong> [85-95]%</li>
-</ul>
+<h2>Next Steps</h2>
+[Suggested follow-up actions or questions]`
 
-<p><strong>Alternative Options:</strong></p>
-<ul>
-<li><strong>[Alternative Product 1]</strong> - $[Price] - [brief reason]</li>
-<li><strong>[Alternative Product 2]</strong> - $[Price] - [brief reason]</li>
-</ul>
-
-<h2>💡 Expert Insights:</h2>
-<p>[Provide detailed analysis of why these products match user needs, value for money, and any special considerations]</p>
-
-ANALYSIS CRITERIA:
-- Product type and category matching
-- Size requirements (screen size for TVs)
-- Budget constraints and value analysis
-- Brand preferences
-- Feature requirements (4K, Smart TV, HDR, etc.)
-- Use case optimization (bedroom, living room, gaming)
-- Price-to-performance ratio
-
-IMPORTANT: Always mention specific product names and IDs from the database so the system can display them on the right side. Be conversational, helpful, and provide comprehensive product insights with proper HTML formatting.`
-
-    const result = streamText({
-      model: openrouter("deepseek/deepseek-chat"),
+    const result = await streamText({
+      model: openrouter("deepseek/deepseek-chat:free"),
       system: systemPrompt,
       messages,
-      temperature: 0.7,
-      maxTokens: 1200,
+      temperature: 0.3,
+      maxTokens: 1500,
     })
 
-    return result.toDataStreamResponse()
+    // Process the stream to extract primary product ID
+    let primaryProductId = ''
+    const responseStream = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk)
+        const match = text.match(/<!-- PRIMARY_PRODUCT_ID:([a-zA-Z0-9-]+) -->/)
+        if (match) {
+          primaryProductId = match[1]
+        }
+        controller.enqueue(chunk)
+      }
+    })
+
+    return new Response(result.toDataStream().pipeThrough(responseStream), {
+      headers: { 'Content-Type': 'text/plain' }
+    })
   } catch (error) {
     console.error("Chat API Error:", error)
-
-    // Enhanced fallback response with HTML formatting
-    const fallbackResponse = {
-      role: "assistant",
-      content: `<h1>🔧 System Status</h1>
-<p>I'm experiencing technical difficulties with the AI service, but I can still help you find amazing products!</p>
-
-<h2>🌟 Featured Recommendations:</h2>
-<ul>
-<li><strong>Samsung 55" 4K Smart TV</strong> - $699
-  <ul>
-    <li>Perfect for living rooms and entertainment centers</li>
-    <li>4K resolution with HDR support</li>
-    <li>Built-in streaming apps and voice control</li>
-  </ul>
-</li>
-<li><strong>LG 43" Full HD Smart TV</strong> - $399
-  <ul>
-    <li>Great for bedrooms and smaller spaces</li>
-    <li>Affordable with essential smart features</li>
-    <li>webOS platform for easy streaming</li>
-  </ul>
-</li>
-<li><strong>Sony 65" 4K OLED TV</strong> - $1299
-  <ul>
-    <li>Premium option for movie enthusiasts</li>
-    <li>Perfect blacks and cinema-grade colors</li>
-    <li>Ideal for large living rooms</li>
-  </ul>
-</li>
-</ul>
-
-<h2>💬 How to Get Better Recommendations:</h2>
-<p>Tell me about:</p>
-<ul>
-<li><strong>Room size:</strong> Where will you use it?</li>
-<li><strong>Budget range:</strong> What's your price limit?</li>
-<li><strong>Key features:</strong> 4K, gaming, smart features?</li>
-<li><strong>Brand preference:</strong> Any preferred brands?</li>
-</ul>
-
-<p><em>Please try your request again, and I'll provide personalized recommendations!</em></p>`,
-    }
+    
+    // Fallback with default recommendations
+    const fallbackProducts = productsData.slice(0, 3)
+    const primary = fallbackProducts[0]
+    const alternatives = fallbackProducts.slice(1)
 
     return new Response(
       JSON.stringify({
-        messages: [fallbackResponse],
-        error: "AI service temporarily unavailable",
+        messages: [{
+          role: "assistant",
+          content: `<h1>⚠️ System Notice</h1>
+          <p>I'm having temporary difficulties. Here are some recommendations:</p>
+          
+          <h2>Best Match For Your Needs</h2>
+          <p><strong>${primary.title}</strong> - $${primary.price}</p>
+          <p>${primary.shortDescription}</p>
+          
+          <h2>Alternative Options</h2>
+          <ul>
+            ${alternatives.map(p => `<li><strong>${p.title}</strong> - $${p.price}</li>`).join('')}
+          </ul>`
+        }]
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      },
+      { status: 200, headers: { "Content-Type": "application/json" } }
     )
   }
 }
